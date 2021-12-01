@@ -12,7 +12,29 @@ const gpa = util.gpa;
 const data = @embedFile("../data/day01.txt");
 
 pub fn main() !void {
+    var count: u32 = 0;
+    var window: [3]i64 = .{ 0, 0, 0 };
+    var part1: u32 = 0;
+    var part2: u32 = 0;
 
+    var lines = tokenize(u8, data, "\r\n");
+    while (lines.next()) |line| {
+        const num = parseInt(i64, line, 10) catch unreachable;
+
+        if (count >= 1 and num > window[2]) {
+            part1 += 1;
+        }
+        if (count >= 3 and num > window[0]) {
+            part2 += 1;
+        }
+
+        window[0] = window[1];
+        window[1] = window[2];
+        window[2] = num;
+        count += 1;
+    }
+
+    print("part1={}, part2={}\n", .{part1, part2});
 }
 
 // Useful stdlib functions
