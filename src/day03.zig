@@ -68,6 +68,7 @@ pub fn main() !void {
     bench(recs, part2FilteredLists, gamma_high_bit, "filtered lists");
     bench(recs, part2InPlaceFilter, gamma_high_bit, "in place filtering");
     bench(recs, part2Sorting, gamma_high_bit, "sorting");
+    bench(recs, part2CountingSort, gamma_high_bit, "counting sort");
 }
 
 fn bench(recs: []const u12, comptime benchmark: anytype, gamma_high_bit: u12, name: []const u8) void {
@@ -243,6 +244,80 @@ fn findSortedDivider(recs: []const u12, bit: u12, comptime sentinel_must_exist: 
 fn part2Sorting(recs: []u12, gamma_high_bit: u12) void {
     _ = gamma_high_bit;
     sort(u12, recs, {}, comptime asc(u12));
+
+    var oxy_min: usize = 0;
+    var oxy_max: usize = recs.len;
+    var co2_min: usize = 0;
+    var co2_max: usize = recs.len;
+
+    // First divider applies to both
+    {
+        const div = findSortedDivider(recs, 1<<11, true);
+        if (div.halfway_bit == 0) {
+            oxy_max = div.idx;
+            co2_min = div.idx;
+        } else {
+            co2_max = div.idx;
+            oxy_min = div.idx;
+        }
+    }
+
+    // Now do co2
+    {
+        var i: u12 = 1<<10;
+        while (co2_min + 1 != co2_max) : (i = i >> 1) {
+            assert(i != 0);
+            const div = findSortedDivider(recs[co2_min..co2_max], i, true);
+            if (div.halfway_bit != 0) {
+                co2_max = co2_min + div.idx;
+            } else {
+                co2_min = co2_min + div.idx;
+            }
+        }
+    }
+
+    // Then oxygen
+    {
+        var i: u12 = 1<<10;
+        while (oxy_min + 1 != oxy_max) : (i = i >> 1) {
+            assert(i != 0);
+            const div = findSortedDivider(recs[oxy_min..oxy_max], i, false);
+            if (div.halfway_bit != 0) {
+                oxy_min = oxy_min + div.idx;
+            } else {
+                oxy_max = oxy_min + div.idx;
+            }
+        }
+    }
+
+    const oxy = recs[oxy_min];
+    const co2 = recs[co2_min];
+
+    const part2 = @as(usize, oxy) * @as(usize, co2);
+    std.mem.doNotOptimizeAway(&part2);
+
+    // Don't use assert here because that could influence the optimizer
+    if (std.debug.runtime_safety and oxy != 3399) @panic("Bad oxygen value");
+    if (std.debug.runtime_safety and co2 != 1249) @panic("Bad co2 value");
+}
+
+fn part2CountingSort(recs: []u12, gamma_high_bit: u12) void {
+    _ = gamma_high_bit;
+
+    // Sort by making a bit set and then splatting it back out
+    {
+        var set_values = std.StaticBitSet(1<<12).initEmpty();
+        for (recs) |rec| {
+            set_values.set(rec);
+        }
+
+        var it = set_values.iterator(.{});
+        var i: usize = 0;
+        while (it.next()) |value| : (i += 1) {
+            recs[i] = @intCast(u12, value);
+        }
+        assert(i == recs.len);
+    }
 
     var oxy_min: usize = 0;
     var oxy_max: usize = recs.len;
