@@ -12,7 +12,7 @@ const gpa = util.gpa;
 
 const data = @embedFile("../data/day08.txt");
 
-fn numFromStr(str: []const u8) u7 {
+fn segmentMask(str: []const u8) u7 {
     var set = std.StaticBitSet(7).initEmpty();
     for (str) |chr| {
         set.set(chr - 'a');
@@ -33,28 +33,32 @@ pub fn main() !void {
         var seven: u7 = undefined;
         var i: usize = 0;
         while (i < 10) : (i += 1) {
-            const mask = numFromStr(parts.next().?);
-            if (@popCount(u7, mask) == 4) four = mask;
-            if (@popCount(u7, mask) == 3) seven = mask;
+            const str = parts.next().?;
+            if (str.len == 4) four = segmentMask(str);
+            if (str.len == 3) seven = segmentMask(str);
         }
 
         i = 0;
         var num: int = 0;
         while (i < 4) : (i += 1) {
-            const mask = numFromStr(parts.next().?);
-            const digit: int = switch (@popCount(u7, mask)) {
+            const str = parts.next().?;
+            const digit: int = switch (str.len) {
                 2 => blk: { part1 += 1; break :blk @as(int, 1); },
                 3 => blk: { part1 += 1; break :blk @as(int, 7); },
                 4 => blk: { part1 += 1; break :blk @as(int, 4); },
                 7 => blk: { part1 += 1; break :blk @as(int, 8); },
-                5 =>
-                    if (mask & seven == seven) @as(int, 3)
+                5 => blk: {
+                    const mask = segmentMask(str);
+                    break :blk if (mask & seven == seven) @as(int, 3)
                     else if (@popCount(u7, mask & four) == 3) @as(int, 5)
-                    else @as(int, 2),
-                6 =>
-                    if (mask & four == four) @as(int, 9)
+                    else @as(int, 2);
+                },
+                6 => blk: {
+                    const mask = segmentMask(str);
+                    break :blk if (mask & four == four) @as(int, 9)
                     else if (mask & seven == seven) @as(int, 0)
-                    else @as(int, 6),
+                    else @as(int, 6);
+                },
                 else => unreachable,
             };
             num = num * 10 + digit;
