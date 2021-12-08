@@ -11,13 +11,13 @@ const util = @import("util.zig");
 const gpa = util.gpa;
 
 const data = @embedFile("../data/day07.txt");
-//const data = "16,1,2,0,4,2,7,1,2,14";
 
 const Record = struct {
     pos: int,
 };
 
 pub fn main() !void {
+    var total: int = 0;
     const positions = blk: {
         var recs = List(int).init(gpa);
         var iter = tokenize(u8, data, "\r\n,");
@@ -25,56 +25,43 @@ pub fn main() !void {
             if (num.len == 0) { continue; }
 
             const dist = try parseInt(int, num, 10);
+            total += dist;
             try recs.append(dist);
         }
         break :blk recs.toOwnedSlice();
     };
 
+    // The ideal part 1 position is the median, so sort and then
+    // grab the middle value.  If there are an even number of positions,
+    // then any value between the two median values is a minimum.
+    // In order for AoC to have a unique answer, we can assume that
+    // either the number of positions is odd, or the two medians
+    // have the same value.
     sort(int, positions, {}, comptime asc(int));
-
     const part1_pos = positions[positions.len / 2];
     var part1: int = 0;
     for (positions) |rec| {
         part1 += std.math.absInt(rec - part1_pos) catch unreachable;
     }
 
-    // Estimate part 2 start position
-    var part2_pos = part1_pos;
-    // Determine gradient direction
-    var curr_cost = calculateCost(positions, part2_pos);
-    var asc_cost = calculateCost(positions, part2_pos + 1);
-    var part2_incr: int = -1;
-    if (curr_cost > asc_cost) {
-        part2_incr = 1;
-        curr_cost = asc_cost;
-        part2_pos += 1;
+    // The ideal part 2 position is the average location, but that is probably
+    // not an integer.  The cost curve is not symmetric, so rounding to the
+    // nearest integer may not be correct.  But the best integer value must
+    // be either the floor or ciel of the real average value, so we will
+    // calculate and test both.
+    const avg_min = @divTrunc(total, @intCast(int, positions.len));
+    const avg_max = @divTrunc(total + @intCast(int, positions.len) - 1, @intCast(int, positions.len));
+    var low_cost: int = 0;
+    var high_cost: int = 0;
+    for (positions) |it| {
+        const low_diff = std.math.absInt(it - avg_min) catch unreachable;
+        low_cost += @divExact(low_diff * (low_diff + 1), 2);
+        const high_diff = std.math.absInt(it - avg_max) catch unreachable;
+        high_cost += @divExact(high_diff * (high_diff + 1), 2);
     }
-
-    // Walk down gradient until we hit the minimum
-    var steps: usize = 0;
-    while (true) {
-        const next_cost = calculateCost(positions, part2_pos + part2_incr);
-        if (next_cost > curr_cost) {
-            break;
-        } else {
-            curr_cost = next_cost;
-            part2_pos += part2_incr;
-        }
-        steps += 1;
-    }
-
-    const part2 = curr_cost;
+    const part2 = min(low_cost, high_cost);
 
     print("part1={}, part2={}\n", .{part1, part2});
-}
-
-fn calculateCost(recs: []const int, target: int) int {
-    var cost: int = 0;
-    for (recs) |it| {
-        const diff = std.math.absInt(it - target) catch unreachable;
-        cost += @divExact(diff * (diff + 1), 2);
-    }
-    return cost;
 }
 
 // Useful stdlib functions
