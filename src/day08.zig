@@ -20,47 +20,6 @@ fn numFromStr(str: []const u8) u7 {
     return set.mask;
 }
 
-const Input = struct {
-    in: [10]u7,
-    out: [4]u7,
-
-    fn findDigit(self: @This(), num: u7) usize {
-        switch (@popCount(u7, num)) {
-            2 => return 1,
-            3 => return 7,
-            4 => return 4,
-            7 => return 8,
-            5 => {
-                const seven = self.in[1];
-                const four = self.in[2];
-                if (num & seven == seven) {
-                    return 3;
-                } else if (@popCount(u7, num & four) == 3) {
-                    return 5;
-                } else {
-                    return 2;
-                }
-            },
-            6 => {
-                const seven = self.in[1];
-                const four = self.in[2];
-                if (num & four == four) {
-                    return 9;
-                } else if (num & seven == seven) {
-                    return 0;
-                } else {
-                    return 6;
-                }
-            },
-            else => unreachable,
-        }
-    }
-};
-
-fn ascCount(_: void, a: u7, b: u7) bool {
-    return @popCount(u7, a) < @popCount(u7, b);
-}
-
 pub fn main() !void {
     var part1: int = 0;
     var part2: int = 0;
@@ -70,31 +29,39 @@ pub fn main() !void {
         if (line.len == 0) { continue; }
         var parts = tokenize(u8, line, " |");
 
-        var input: Input = undefined;
-        for (input.in) |*it| {
-            it.* = numFromStr(parts.next().?);
+        var four: u7 = undefined;
+        var seven: u7 = undefined;
+        var i: usize = 0;
+        while (i < 10) : (i += 1) {
+            const mask = numFromStr(parts.next().?);
+            if (@popCount(u7, mask) == 4) four = mask;
+            if (@popCount(u7, mask) == 3) seven = mask;
         }
-        for (input.out) |*it| {
-            it.* = numFromStr(parts.next().?);
-        }
-        assert(parts.next() == null);
 
-        sort(u7, &input.in, {}, ascCount);
-
-        for (input.out) |out| {
-            switch (@popCount(u7, out)) {
-                2, 3, 4, 7 => part1 += 1,
-                5, 6 => {},
+        i = 0;
+        var num: int = 0;
+        while (i < 4) : (i += 1) {
+            const mask = numFromStr(parts.next().?);
+            const digit: int = switch (@popCount(u7, mask)) {
+                2 => blk: { part1 += 1; break :blk @as(int, 1); },
+                3 => blk: { part1 += 1; break :blk @as(int, 7); },
+                4 => blk: { part1 += 1; break :blk @as(int, 4); },
+                7 => blk: { part1 += 1; break :blk @as(int, 8); },
+                5 =>
+                    if (mask & seven == seven) @as(int, 3)
+                    else if (@popCount(u7, mask & four) == 3) @as(int, 5)
+                    else @as(int, 2),
+                6 =>
+                    if (mask & four == four) @as(int, 9)
+                    else if (mask & seven == seven) @as(int, 0)
+                    else @as(int, 6),
                 else => unreachable,
-            }
+            };
+            num = num * 10 + digit;
         }
-
-        const d3 = input.findDigit(input.out[0]);
-        const d2 = input.findDigit(input.out[1]);
-        const d1 = input.findDigit(input.out[2]);
-        const d0 = input.findDigit(input.out[3]);
-        const num = d3 * 1000 + d2 * 100 + d1 * 10 + d0;
         part2 += @intCast(int, num);
+
+        assert(parts.next() == null);
     }
 
     print("part1={}, part2={}\n", .{part1, part2});
