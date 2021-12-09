@@ -50,6 +50,22 @@ pub fn main() !void {
     const pitch = width + 2;
     const start = pitch + 1;
 
+    var basin_map = try gpa.alloc(u8, height_map.len);
+    defer gpa.free(basin_map);
+    @memset(basin_map.ptr, 0, basin_map.len);
+
+    for (height_map) |rec, i| {
+        if (rec == 9) {
+            basin_map[i] = 1;
+        }
+    }
+
+    var big1_count: usize = 0;
+    var big2_count: usize = 0;
+    var big3_count: usize = 0;
+
+    var basin_id: u8 = 2;
+
     var part1: usize = 0;
     var y: usize = 0;
     while (y < height) : (y += 1) {
@@ -67,65 +83,55 @@ pub fn main() !void {
                 self < up)
             {
                 part1 += self + 1;
+
+                const count = try floodFill(basin_map, pitch, idx, basin_id);
+                basin_id += 1;
+
+                if (count > big1_count) {
+                    big3_count = big2_count;
+                    big2_count = big1_count;
+                    big1_count = count;
+                } else if (count > big2_count) {
+                    big3_count = big2_count;
+                    big2_count = count;
+                } else if (count > big3_count) {
+                    big3_count = count;
+                }
             }
-        }
-    }
-
-    var basin_map = try gpa.alloc(u8, height_map.len);
-    defer gpa.free(basin_map);
-    @memset(basin_map.ptr, 0, basin_map.len);
-
-    for (height_map) |rec, i| {
-        if (rec == 9) {
-            basin_map[i] = 1;
-        }
-    }
-
-    var big1_count: usize = 0;
-    var big2_count: usize = 0;
-    var big3_count: usize = 0;
-
-    var basin_id: u8 = 2;
-    while (indexOf(u8, basin_map, 0)) |first_item| : (basin_id += 1) {
-        var frontier = std.ArrayList(usize).init(gpa);
-        defer frontier.deinit();
-
-        try frontier.append(first_item);
-
-        var count: usize = 0;
-
-        while (frontier.popOrNull()) |idx| {
-            if (basin_map[idx] != 0) continue;
-
-            basin_map[idx] = basin_id;
-            count += 1;
-            
-            const left = basin_map[idx - 1];
-            const up = basin_map[idx - pitch];
-            const down = basin_map[idx + pitch];
-            const right = basin_map[idx + 1];
-
-            if (left == 0) try frontier.append(idx - 1);
-            if (up == 0) try frontier.append(idx - pitch);
-            if (down == 0) try frontier.append(idx + pitch);
-            if (right == 0) try frontier.append(idx + 1);
-        }
-
-        if (count > big1_count) {
-            big3_count = big2_count;
-            big2_count = big1_count;
-            big1_count = count;
-        } else if (count > big2_count) {
-            big3_count = big2_count;
-            big2_count = count;
-        } else if (count > big3_count) {
-            big3_count = count;
         }
     }
 
     const part2 = @intCast(int, big1_count * big2_count * big3_count);
 
     print("part1={}, part2={}\n", .{part1, part2});
+}
+
+fn floodFill(map: []u8, pitch: usize, seed_idx: usize, basin_id: u8) !usize {
+    var frontier = std.ArrayList(usize).init(gpa);
+    defer frontier.deinit();
+
+    try frontier.append(seed_idx);
+
+    var count: usize = 0;
+
+    while (frontier.popOrNull()) |idx| {
+        if (map[idx] != 0) continue;
+
+        map[idx] = basin_id;
+        count += 1;
+        
+        const left = map[idx - 1];
+        const up = map[idx - pitch];
+        const down = map[idx + pitch];
+        const right = map[idx + 1];
+
+        if (left == 0) try frontier.append(idx - 1);
+        if (up == 0) try frontier.append(idx - pitch);
+        if (down == 0) try frontier.append(idx + pitch);
+        if (right == 0) try frontier.append(idx + 1);
+    }
+
+    return count;
 }
 
 // Useful stdlib functions
