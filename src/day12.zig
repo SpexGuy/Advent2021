@@ -68,6 +68,48 @@ pub fn main() !void {
     defer gpa.free(edges);
     defer gpa.free(names);
 
+    const part1_r = try countPathsRecursive(names, edges, false);
+    const part2_r = try countPathsRecursive(names, edges, true);
+    const part1_s = try countPathsStack(names, edges, false);
+    const part2_s = try countPathsStack(names, edges, true);
+
+    print("recur: part1={}, part2={}\n", .{part1_r, part2_r});
+    print("stack: part1={}, part2={}\n", .{part1_s, part2_s});
+}
+
+fn countPathsRecursive(names: []const Str, edges: []const Edge, in_allow_revisit: bool) !usize {
+    const Walk = struct {
+        already_hit: std.DynamicBitSet,
+        names: []const Str,
+        edges: []const Edge,
+
+        fn countPaths(self: *@This(), id: u8, allow_revisit: bool) usize {
+            if (id == end_id) return 1;
+
+            var is_double = false;
+            if (self.already_hit.isSet(id)) {
+                if (!allow_revisit or id == start_id) return 0;
+                is_double = true;
+            } else if (self.names[id][0] >= 'a') {
+                self.already_hit.set(id);
+            }
+            defer if (!is_double) {
+                self.already_hit.unset(id);
+            };
+
+            var paths: usize = 0;
+            next_edge: for (self.edges) |edge| {
+                const n = if (edge.a == id) edge.b
+                else if (edge.b == id) edge.a
+                else continue :next_edge;
+
+                paths += self.countPaths(n, allow_revisit and !is_double);
+            }
+
+            return paths;
+        }
+    };
+
     var walk = Walk{
         .edges = edges,
         .names = names,
@@ -75,117 +117,80 @@ pub fn main() !void {
     };
     defer walk.already_hit.deinit();
 
-    //const part1 = walk.countPathsRecursive(start_id, false);
-    //const part2 = walk.countPathsRecursive(start_id, true);
-    const part1 = try walk.countPathsStack(false);
-    const part2 = try walk.countPathsStack(true);
-
-    print("part1={}, part2={}\n", .{part1, part2});
+    return walk.countPaths(start_id, in_allow_revisit);
 }
 
-const Walk = struct {
-    already_hit: std.DynamicBitSet,
-    names: []const Str,
-    edges: []const Edge,
-    did_double: bool = false,
-
+fn countPathsStack(names: []const Str, edges: []const Edge, allow_revisit: bool) !usize {
     const State = struct {
         id: u8,
-        is_double: bool,
         next_edge: u8 = 0,
+        is_double: bool,
     };
 
-    fn countPathsStack(self: *@This(), allow_revisit: bool) !usize {
-        var stack = std.ArrayList(State).init(gpa);
-        defer stack.deinit();
+    var stack = std.ArrayList(State).init(gpa);
+    defer stack.deinit();
 
-        self.already_hit.set(start_id);
-        try stack.append(.{
-            .id = start_id,
-            .is_double = false,
-        });
+    var already_hit = try std.DynamicBitSet.initEmpty(gpa, names.len);
+    defer already_hit.deinit();
 
-        var total: usize = 0;
+    already_hit.set(start_id);
+    try stack.append(.{
+        .id = start_id,
+        .is_double = false,
+    });
 
-        loop: while (stack.items.len > 0) {
-            const curr = &stack.items[stack.items.len - 1];
-            next_edge: while (curr.next_edge < self.edges.len) {
-                const e = self.edges[curr.next_edge];
-                curr.next_edge += 1;
+    var total: usize = 0;
+    var did_double = false;
 
-                const n = if (e.a == curr.id) e.b
-                else if (e.b == curr.id) e.a
-                else continue :next_edge;
+    loop: while (stack.items.len > 0) {
+        const curr = &stack.items[stack.items.len - 1];
+        next_edge: while (curr.next_edge < edges.len) {
+            const e = edges[curr.next_edge];
+            curr.next_edge += 1;
 
-                // never move back to the start
-                if (n == start_id) {
-                    continue :next_edge;
-                }
-
-                if (n == end_id) {
-                    total += 1;
-                    continue :next_edge;
-                }
-
-                var is_double: bool = false;
-                if (self.already_hit.isSet(n)) {
-                    if (!allow_revisit or self.did_double) {
-                        continue :next_edge;
-                    }
-                    self.did_double = true;
-                    is_double = true;
-                } else {
-                    const is_small = self.names[n][0] >= 'a';
-                    if (is_small) self.already_hit.set(n);
-                }
-
-                try stack.append(.{
-                    .id = n,
-                    .is_double = is_double,
-                });
-                continue :loop;
-            }
-
-            if (curr.is_double) {
-                self.did_double = false;
-            } else {
-                self.already_hit.unset(curr.id);
-            }
-            _ = stack.pop();
-        }
-
-        return total;
-    }
-
-    fn countPathsRecursive(self: *@This(), id: u8, allow_revisit: bool) usize {
-        if (id == end_id) return 1;
-
-        var is_double = false;
-        if (self.already_hit.isSet(id)) {
-            if (!allow_revisit or id == start_id or self.did_double) return 0;
-            is_double = true;
-            self.did_double = true;
-        } else if (self.names[id][0] >= 'a') {
-            self.already_hit.set(id);
-        }
-        defer if (is_double) {
-            self.did_double = false;
-        } else {
-            self.already_hit.unset(id);
-        };
-
-        var paths: usize = 0;
-        next_edge: for (self.edges) |edge| {
-            const n = if (edge.a == id) edge.b
-            else if (edge.b == id) edge.a
+            const n = if (e.a == curr.id) e.b
+            else if (e.b == curr.id) e.a
             else continue :next_edge;
 
-            paths += self.countPathsRecursive(n, allow_revisit);
+            // never move back to the start
+            if (n == start_id) {
+                continue :next_edge;
+            }
+
+            if (n == end_id) {
+                total += 1;
+                continue :next_edge;
+            }
+
+            var is_double: bool = false;
+            if (already_hit.isSet(n)) {
+                if (!allow_revisit or did_double) {
+                    continue :next_edge;
+                }
+                did_double = true;
+                is_double = true;
+            } else {
+                const is_small = names[n][0] >= 'a';
+                if (is_small) already_hit.set(n);
+            }
+
+            try stack.append(.{
+                .id = n,
+                .is_double = is_double,
+            });
+            continue :loop;
         }
 
-        return paths;
+        if (curr.is_double) {
+            did_double = false;
+        } else {
+            already_hit.unset(curr.id);
+        }
+        _ = stack.pop();
     }
-};
+
+    return total;
+}
 
 // Useful stdlib functions
 const tokenize = std.mem.tokenize;
