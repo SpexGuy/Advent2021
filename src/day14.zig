@@ -56,10 +56,11 @@ pub fn main() !void {
         }
     }
 
-    //bench(eager, rules, template, "eager");
-    //bench(lazy, rules, template, "lazy");
+    bench(eager, rules, template, "eager");
+    bench(fungible, rules, template, "fungible");
+    bench(lazy, rules, template, "lazy");
 
-    const result = eager(rules, template);
+    const result = fungible(rules, template);
     print("part1={}, part2={}\n", .{result.part1, result.part2});
 }
 
@@ -126,6 +127,84 @@ fn eager(rules: Rules, template: []const u8) Parts {
     const part2 = calcScore(template, rules, counts);
 
     return .{ .part1 = part1, .part2 = part2 };
+}
+
+fn fungible(rules: Rules, template: []const u8) Parts {
+    const pairs = rules.keys();
+    const inserts = rules.values();
+    const links = gpa.alloc(Link, pairs.len) catch unreachable;
+    defer gpa.free(links);
+    var counts = gpa.alloc(u64, pairs.len) catch unreachable;
+    defer gpa.free(counts);
+    var next_counts = gpa.alloc(u64, pairs.len) catch unreachable;
+    defer gpa.free(next_counts);
+
+    for (links) |*link, i| {
+        link.left = @intCast(u8, rules.getIndex(.{pairs[i][0], inserts[i]}).?);
+        link.right = @intCast(u8, rules.getIndex(.{inserts[i], pairs[i][1]}).?);
+    }
+
+    std.mem.set(u64, counts, 0);
+    for (template[0..template.len-1]) |_, i| {
+        const pair = template[i..][0..2].*;
+        const idx = rules.getIndex(pair).?;
+        counts[idx] += 1;
+    }
+
+    var depth: usize = 0;
+    while (depth < 10) : (depth += 1) {
+        std.mem.set(u64, next_counts, 0);
+        for (links) |link, i| {
+            const amt = counts[i];
+            next_counts[link.left] += amt;
+            next_counts[link.right] += amt;
+        }
+
+        const tmp = counts;
+        counts = next_counts;
+        next_counts = tmp;
+    }
+
+    const part1 = calcScoreForward(pairs, counts, template[template.len-1]);
+
+    while (depth < 40) : (depth += 1) {
+        std.mem.set(u64, next_counts, 0);
+        for (links) |link, i| {
+            const amt = counts[i];
+            next_counts[link.left] += amt;
+            next_counts[link.right] += amt;
+        }
+
+        const tmp = counts;
+        counts = next_counts;
+        next_counts = tmp;
+    }
+
+    const part2 = calcScoreForward(pairs, counts, template[template.len-1]);
+
+    return .{ .part1 = part1, .part2 = part2 };
+}
+
+fn calcScoreForward(pairs: []const [2]u8, counts: []const u64, last_char: u8) u64 {
+    var scores = std.mem.zeroes([26]usize);
+    for (counts) |c, i| {
+        scores[pairs[i][0] - 'A'] += c;
+    }
+    scores[last_char - 'A'] += 1;
+
+    var max_count: u64 = 0;
+    var min_count: u64 = std.math.maxInt(u64);
+
+    for (scores) |c| {
+        if (c != 0 and c < min_count) {
+            min_count = c;
+        }
+        if (c > max_count) {
+            max_count = c;
+        }
+    }
+
+    return max_count - min_count;
 }
 
 fn lazy(rules: Rules, template: []const u8) Parts {
