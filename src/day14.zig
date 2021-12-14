@@ -19,11 +19,27 @@ const Key = struct {
 const Result = std.meta.Vector(26, u64);
 const Memo = Map(Key, Result);
 
-const Rules = Map([2]u8, u8);
+const Rules = std.AutoArrayHashMap([2]u8, u8);
+
+const CountsArr = [26]u64;
+const CountsVec = std.meta.Vector(26, u64);
+
+const PairId = u8;
+
+const Link = struct {
+    left: PairId,
+    right: PairId,
+};
+
+const Parts = struct {
+    part1: u64,
+    part2: u64,
+};
 
 pub fn main() !void {
     var template: []const u8 = undefined;
     var rules = Rules.init(gpa);
+    defer rules.deinit();
     {
         var lines = tokenize(u8, data, "\r\n");
         template = lines.next().?;
@@ -40,13 +56,113 @@ pub fn main() !void {
         }
     }
 
+    //bench(eager, rules, template, "eager");
+    //bench(lazy, rules, template, "lazy");
+
+    const result = eager(rules, template);
+    print("part1={}, part2={}\n", .{result.part1, result.part2});
+}
+
+fn bench(comptime func: fn (Rules, []const u8) Parts, rules: Rules, template: []const u8, name: []const u8) void {
+    var i: usize = 0;
+    var best_time: usize = std.math.maxInt(usize);
+    var total_time: usize = 0;
+    const num_runs = 1000;
+    while (i < num_runs) : (i += 1) {
+        const timer = std.time.Timer.start() catch unreachable;
+        const parts = func(rules, template);
+        std.mem.doNotOptimizeAway(&parts);
+        const lap_time = timer.read();
+        if (best_time > lap_time) best_time = lap_time;
+        total_time += lap_time;
+    }
+    print("min {} avg {} {s}\n", .{best_time, total_time / num_runs, name});
+}
+
+fn eager(rules: Rules, template: []const u8) Parts {
+    const pairs = rules.keys();
+    const inserts = rules.values();
+    const links = gpa.alloc(Link, pairs.len) catch unreachable;
+    defer gpa.free(links);
+    var counts = gpa.alloc(CountsArr, pairs.len) catch unreachable;
+    defer gpa.free(counts);
+    var next_counts = gpa.alloc(CountsArr, pairs.len) catch unreachable;
+    defer gpa.free(next_counts);
+
+    for (links) |*link, i| {
+        link.left = @intCast(u8, rules.getIndex(.{pairs[i][0], inserts[i]}).?);
+        link.right = @intCast(u8, rules.getIndex(.{inserts[i], pairs[i][1]}).?);
+        std.mem.set(u64, &counts[i], 0);
+        counts[i][pairs[i][0] - 'A'] = 1;
+    }
+
+    var depth: usize = 0;
+    while (depth < 10) : (depth += 1) {
+        for (links) |link, i| {
+            const left: CountsVec = counts[link.left];
+            const right: CountsVec = counts[link.right];
+            next_counts[i] = left + right;
+        }
+
+        const tmp = counts;
+        counts = next_counts;
+        next_counts = tmp;
+    }
+
+    const part1 = calcScore(template, rules, counts);
+
+    while (depth < 40) : (depth += 1) {
+        for (links) |link, i| {
+            const left: CountsVec = counts[link.left];
+            const right: CountsVec = counts[link.right];
+            next_counts[i] = left + right;
+        }
+
+        const tmp = counts;
+        counts = next_counts;
+        next_counts = tmp;
+    }
+
+    const part2 = calcScore(template, rules, counts);
+
+    return .{ .part1 = part1, .part2 = part2 };
+}
+
+fn lazy(rules: Rules, template: []const u8) Parts {
     var map = Memo.init(gpa); 
     defer map.deinit();
 
     const part1 = calcScoreAtDepth(&map, template, rules, 10);
     const part2 = calcScoreAtDepth(&map, template, rules, 40);
 
-    print("part1={}, part2={}\n", .{part1, part2});
+    return .{ .part1 = part1, .part2 = part2 };
+}
+
+fn calcScore(template: []const u8, rules: Rules, counts: []const CountsArr) u64 {
+    var total_counts = std.mem.zeroes(CountsVec);
+    for (template[0..template.len-1]) |_, i| {
+        const pair = template[i..][0..2].*;
+        const index = rules.getIndex(pair).?;
+        const pair_counts: CountsVec = counts[index];
+        total_counts += pair_counts;
+    }
+
+    var counts_arr: CountsArr = total_counts;
+    counts_arr[template[template.len-1] - 'A'] += 1;
+
+    var max_count: u64 = 0;
+    var min_count: u64 = std.math.maxInt(u64);
+
+    for (counts_arr) |c| {
+        if (c != 0 and c < min_count) {
+            min_count = c;
+        }
+        if (c > max_count) {
+            max_count = c;
+        }
+    }
+
+    return max_count - min_count;
 }
 
 fn calcScoreAtDepth(map: *Memo, template: []const u8, rules: Rules, depth: u8) u64 {
