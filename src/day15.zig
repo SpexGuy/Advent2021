@@ -62,6 +62,7 @@ pub fn main() !void {
     const pitch = width;
     const start = 0;
     
+    var timer = try std.time.Timer.start();
     const part1 = blk: {
         const costs = try gpa.alloc(u64, grid.len);
         defer gpa.free(costs);
@@ -105,6 +106,8 @@ pub fn main() !void {
             }
         }
     };
+
+    const tp1 = timer.lap();
 
     const part2 = blk: {
         const costs = try gpa.alloc(u64, grid.len * 5 * 5);
@@ -157,7 +160,10 @@ pub fn main() !void {
         }
     };
 
+    const tp2 = timer.read();
+
     print("part1={}, part2={}\n", .{part1, part2});
+    print("tp1={}, tp2={}\n", .{tp1, tp2});
 }
 
 // Useful stdlib functions
