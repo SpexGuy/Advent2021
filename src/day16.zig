@@ -12,6 +12,8 @@ const gpa = util.gpa;
 
 const data = @embedFile("../data/day16.txt");
 
+const BitReader = std.io.BitReader(.Big, std.io.FixedBufferStream([]const u8).Reader);
+
 const PacketType = enum {
     add,
     mul,
@@ -24,40 +26,13 @@ const PacketType = enum {
 };
 
 const BitIter = struct {
+    reader: BitReader,
     position: usize = 0,
-    str: []const u8,
-    word: u4 = 0,
-    remain: u8 = 0,
-    part1: u32 = 0,
+    part1: u64 = 0,
 
-    pub fn nextBit(self: *@This()) u1 {
-        if (self.remain == 0) {
-            const char = self.str[0];
-            self.str = self.str[1..];
-            const word = switch (char) {
-                '0'...'9' => @intCast(u4, char - '0'),
-                'A'...'F' => @intCast(u4, char - 'A' + 10),
-                else => unreachable,
-            };
-            self.word = @bitReverse(u4, word);
-            self.remain = 4;
-        }
-
-        self.position += 1;
-        self.remain -= 1;
-        const bit = self.word & 1;
-        self.word = self.word >> 1;
-        return @intCast(u1, bit);
-    }
-
-    pub fn nextBits(self: *@This(), len: usize) u32 {
-        var result: u32 = 0;
-        var i: usize = 0;
-        while (i < len) : (i += 1) {
-            result <<= 1;
-            result |= self.nextBit();
-        }
-        return result;
+    pub fn nextBits(self: *@This(), len: usize) u64 {
+        self.position += len;
+        return self.reader.readBitsNoEof(u64, len) catch unreachable;
     }
 
     pub fn packet(self: *@This()) u64 {
@@ -83,7 +58,7 @@ const BitIter = struct {
     }
 
     pub fn compare(self: *@This(), type_id: PacketType) u64 {
-        const len_bit = self.nextBit();
+        const len_bit = self.nextBits(1);
         _ = self.nextBits(if (len_bit == 0) 15 else 11);
         const left = self.packet();
         const right = self.packet();
@@ -96,7 +71,7 @@ const BitIter = struct {
     }
 
     pub fn operator(self: *@This(), type_id: PacketType) u64 {
-        const len_bit = self.nextBit();
+        const len_bit = self.nextBits(1);
         var result: usize = switch (type_id) {
             .add => 0,
             .mul => 1,
@@ -135,11 +110,25 @@ const BitIter = struct {
     }
 };
 
-pub fn main() !void {
-    var iter = BitIter{ .str = data };
+pub fn main() void {
+    var timer = std.time.Timer.start() catch unreachable;
+
+    // convert hex to bytes
+    var bytes: [@divExact(data.len, 2)]u8 = undefined;
+    const result = std.fmt.hexToBytes(&bytes, data) catch unreachable;
+    assert(result.len == bytes.len);
+
+    // prepare a bit reader stream
+    var buffer = std.io.fixedBufferStream(@as([]const u8, &bytes));
+    var iter = BitIter{ .reader = std.io.bitReader(.Big, buffer.reader()) };
+
+    // process packets recursively
     const part2 = iter.packet();
     const part1 = iter.part1;
-    print("part1={}, part2={}\n", .{ part1, part2 });
+
+    const time = timer.read();
+
+    print("part1={}, part2={} time={}\n", .{ part1, part2, time });
 }
 
 // Useful stdlib functions
