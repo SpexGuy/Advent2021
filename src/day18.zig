@@ -15,7 +15,6 @@ const data = @embedFile("../data/day18.txt");
 const Item = union(enum) {
     open: void,
     number: u8,
-    next: void,
     close: void,
 };
 
@@ -38,7 +37,7 @@ pub fn main() !void {
                 switch (char) {
                     '[' => try parsed.append(.open),
                     ']' => try parsed.append(.close),
-                    ',' => try parsed.append(.next),
+                    ',' => {},
                     '0'...'9' => try parsed.append(.{ .number = char - '0' }),
                     else => unreachable,
                 }
@@ -79,7 +78,7 @@ pub fn main() !void {
     const part2_time = timer.read();
 
     print("part1={}, part2={}\n", .{part1, part2});
-    print("times: parse={}, part1={}, part2={}\n", .{parse_time, part1_time, part2_time});
+    print("times: parse={}, part1={}, part2={} total={}\n", .{parse_time, part1_time, part2_time, parse_time + part1_time + part2_time});
 }
 
 fn magnitude(value: []const Item) u64 {
@@ -97,7 +96,6 @@ fn magnitude(value: []const Item) u64 {
             switch (self.next()) {
                 .open => {
                     const a = self.calc();
-                    assert(self.next() == .next);
                     const b = self.calc();
                     assert(self.next() == .close);
                     return a * 3 + b * 2;
@@ -116,7 +114,6 @@ fn printItems(num: []const Item) void {
         switch (it) {
             .open => print("[", .{}),
             .close => print("]", .{}),
-            .next => print(",", .{}),
             .number => |n| print("{}", .{n}),
         }
     }
@@ -133,87 +130,56 @@ fn addNumbers(a: []const Item, b: []const Item) ![]const Item {
 
     try output.append(.open);
     try output.appendSlice(a);
-    try output.append(.next);
     try output.appendSlice(b);
     try output.append(.close);
-
-    var simplified = std.ArrayList(Item).init(gpa);
-    defer simplified.deinit();
-    try simplified.ensureTotalCapacity(a.len + b.len + 23);
 
     while (true) {
         var depth: usize = 0;
         var last_num: ?usize = null;
-        var carry_forward: ?u8 = null;
         var did_something = false;
-        var explode_first = true;
 
         for (output.items) |it, i| {
             switch (it) {
                 .open => {
                     depth += 1;
-                    if (depth < 5 or !explode_first) {
-                        try simplified.append(.open);
-                    } else {
+                    if (depth >= 5) {
                         did_something = true;
-                        explode_first = true;
-                    }
-                },
-                .next => {
-                    if (depth < 5 or !explode_first) {
-                        try simplified.append(.next);
-                    } else {
-                        did_something = true;
-                        explode_first = false;
+                        assert(output.items[i+1] == .number);
+                        assert(output.items[i+2] == .number);
+                        assert(output.items[i+3] == .close);
+                        const left = output.items[i+1].number;
+                        const right = output.items[i+2].number;
+                        try output.replaceRange(i, 4, &[_]Item{ .{ .number = 0 } });
+                        if (last_num) |idx| output.items[idx].number += left;
+                        for (output.items[i+1..]) |*nxt| {
+                            if (nxt.* == .number) {
+                                nxt.number += right;
+                                break;
+                            }
+                        }
+                        break;
                     }
                 },
                 .close => {
-                    if (depth < 5) {
-                        try simplified.append(.close);
-                    } else {
-                        did_something = true;
-                        last_num = simplified.items.len;
-                        try simplified.append(.{ .number = 0 });
-                    }
                     depth -= 1;
                 },
-                .number => |num| {
-                    if (carry_forward) |cf| {
-                        try simplified.append(.{ .number = num + cf });
-                        try simplified.appendSlice(output.items[i+1..]);
-                        did_something = true;
-                        break;
-                    }
-                    if (depth < 5) {
-                        last_num = simplified.items.len;
-                        try simplified.append(.{ .number = num });
-                    } else if (explode_first) {
-                        did_something = true;
-                        if (last_num) |idx| {
-                            simplified.items[idx].number += num;
-                        }
-                    } else {
-                        did_something = true;
-                        carry_forward = num;
-                    }
-                }
+                .number => {
+                    last_num = i;
+                },
             }
         }
 
         if (!did_something) {
-            simplified.clearRetainingCapacity();
             for (output.items) |it, i| {
                 if (it == .number and it.number >= 10) {
-                    try simplified.append(.open);
-                    try simplified.append(.{ .number = it.number / 2 });
-                    try simplified.append(.next);
-                    try simplified.append(.{ .number = (it.number+1) / 2 });
-                    try simplified.append(.close);
-                    try simplified.appendSlice(output.items[i+1..]);
+                    try output.replaceRange(i, 1, &[_]Item{
+                        .open,
+                        .{ .number = it.number / 2 },
+                        .{ .number = (it.number + 1) / 2},
+                        .close,
+                    });
                     did_something = true;
                     break;
-                } else {
-                    try simplified.append(it);
                 }
             }
         }
@@ -221,11 +187,6 @@ fn addNumbers(a: []const Item, b: []const Item) ![]const Item {
         //printItems(simplified.items);
 
         if (!did_something) break;
-
-        const tmp = output;
-        output = simplified;
-        simplified = tmp;
-        simplified.clearRetainingCapacity();
     }
 
     //print("\n", .{});
