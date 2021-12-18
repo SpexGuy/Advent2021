@@ -10,12 +10,12 @@ const int = i64;
 const util = @import("util.zig");
 const gpa = util.gpa;
 
+const logging = false;
 const data = @embedFile("../data/day18.txt");
 
-const Item = union(enum) {
-    open: void,
+const Item = struct {
+    depth: u8,
     number: u8,
-    close: void,
 };
 
 pub fn main() !void {
@@ -33,12 +33,13 @@ pub fn main() !void {
             parsed.clearRetainingCapacity();
             try parsed.ensureTotalCapacity(line.len);
 
+            var depth: u8 = 0;
             for (line) |char| {
                 switch (char) {
-                    '[' => try parsed.append(.open),
-                    ']' => try parsed.append(.close),
+                    '[' => depth += 1,
+                    ']' => depth -= 1,
                     ',' => {},
-                    '0'...'9' => try parsed.append(.{ .number = char - '0' }),
+                    '0'...'9' => try parsed.append(.{ .depth = depth, .number = char - '0' }),
                     else => unreachable,
                 }
             }
@@ -86,110 +87,112 @@ fn magnitude(value: []const Item) u64 {
         val: []const Item,
         pos: usize = 0,
 
-        fn next(self: *@This()) Item {
-            var it = self.val[self.pos];
-            self.pos += 1;
-            return it;
-        }
-
-        fn calc(self: *@This()) u64 {
-            switch (self.next()) {
-                .open => {
-                    const a = self.calc();
-                    const b = self.calc();
-                    assert(self.next() == .close);
-                    return a * 3 + b * 2;
-                },
-                .number => |num| return num,
-                else => unreachable,
+        fn calc(self: *@This(), depth: u8) u64 {
+            const it = self.val[self.pos];
+            assert(it.depth >= depth);
+            if (depth == it.depth) {
+                self.pos += 1;
+                return it.number;
+            } else {
+                const a = self.calc(depth + 1);
+                const b = self.calc(depth + 1);
+                return a * 3 + b * 2;
             }
         }
     };
 
-    return (State{ .val = value }).calc();
+    var state = State{ .val = value };
+    const result = state.calc(0);
+    assert(state.pos == value.len);
+    return result;
 }
 
-fn printItems(num: []const Item) void {
-    for (num) |it| {
-        switch (it) {
-            .open => print("[", .{}),
-            .close => print("]", .{}),
-            .number => |n| print("{}", .{n}),
+fn printItems(value: []const Item) void {
+    const State = struct {
+        val: []const Item,
+        pos: usize = 0,
+
+        fn printRec(self: *@This(), depth: u8) void {
+            const it = self.val[self.pos];
+            assert(it.depth >= depth);
+            if (depth == it.depth) {
+                self.pos += 1;
+                print("{}", .{it.number});
+            } else {
+                print("[", .{});
+                self.printRec(depth + 1);
+                print(",", .{});
+                self.printRec(depth + 1);
+                print("]", .{});
+            }
         }
-    }
+    };
+
+    var state = State{ .val = value };
+    const result = state.printRec(0);
     print("\n", .{});
+    assert(state.pos == value.len);
+    return result;
 }
 
 fn addNumbers(a: []const Item, b: []const Item) ![]const Item {
-    //printItems(a);
-    //printItems(b);
+    if (logging) printItems(a);
+    if (logging) printItems(b);
 
     var output = std.ArrayList(Item).init(gpa);
     errdefer output.deinit();
     try output.ensureTotalCapacity(a.len + b.len + 23);
 
-    try output.append(.open);
     try output.appendSlice(a);
     try output.appendSlice(b);
-    try output.append(.close);
+    for (output.items) |*it| {
+        it.depth += 1;
+    }
 
     while (true) {
-        var depth: usize = 0;
-        var last_num: ?usize = null;
-        var did_something = false;
-
-        for (output.items) |it, i| {
-            switch (it) {
-                .open => {
-                    depth += 1;
-                    if (depth >= 5) {
-                        did_something = true;
-                        assert(output.items[i+1] == .number);
-                        assert(output.items[i+2] == .number);
-                        assert(output.items[i+3] == .close);
-                        const left = output.items[i+1].number;
-                        const right = output.items[i+2].number;
-                        try output.replaceRange(i, 4, &[_]Item{ .{ .number = 0 } });
-                        if (last_num) |idx| output.items[idx].number += left;
-                        for (output.items[i+1..]) |*nxt| {
-                            if (nxt.* == .number) {
-                                nxt.number += right;
-                                break;
-                            }
-                        }
-                        break;
+        {
+            var i: usize = 0;
+            while (i < output.items.len) : (i += 1) {
+                const it = output.items[i];
+                if (it.depth >= 5) {
+                    assert(it.depth == 5);
+                    assert(output.items[i+1].depth == 5);
+                    if (i > 0) {
+                        output.items[i-1].number += it.number;
                     }
-                },
-                .close => {
-                    depth -= 1;
-                },
-                .number => {
-                    last_num = i;
-                },
-            }
-        }
-
-        if (!did_something) {
-            for (output.items) |it, i| {
-                if (it == .number and it.number >= 10) {
-                    try output.replaceRange(i, 1, &[_]Item{
-                        .open,
-                        .{ .number = it.number / 2 },
-                        .{ .number = (it.number + 1) / 2},
-                        .close,
-                    });
-                    did_something = true;
-                    break;
+                    if (i + 2 < output.items.len) {
+                        output.items[i+2].number += output.items[i+1].number;
+                    }
+                    _ = output.orderedRemove(i+1);
+                    output.items[i] = .{ .number = 0, .depth = 4 };
                 }
             }
         }
 
-        //printItems(simplified.items);
+        var needs_another = false;
+        {
+            var i: usize = 0;
+            while (i < output.items.len) {
+                const it = output.items[i];
+                if (it.number >= 10) {
+                    output.items[i] = .{ .depth = it.depth + 1, .number = it.number / 2 };
+                    try output.insert(i+1, .{ .depth = it.depth + 1, .number = (it.number + 1) / 2 });
+                    if (it.depth == 4) {
+                        needs_another = true;
+                        break;
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+        }
 
-        if (!did_something) break;
+        if (logging) printItems(output.items);
+
+        if (!needs_another) break;
     }
 
-    //print("\n", .{});
+    if (logging) print("\n", .{});
 
     return output.toOwnedSlice();
 }
