@@ -168,6 +168,9 @@ pub fn main() !void {
 
     const parse_time = timer.lap();
 
+    var count_table = Map(P3, u8).init(gpa);
+    defer count_table.deinit();
+
     var maps = try ScanMap.init(recs.len);
     maps.add(recs[0], 0, .{.x = 0, .y = 0, .z = 0}, 0);
     placed: while (maps.placed.count() != 0) {
@@ -176,22 +179,21 @@ pub fn main() !void {
             const scanner = recs[idx];
             var rotation: u32 = 0;
             while (rotation < 24) : (rotation += 1) {
+                count_table.clearRetainingCapacity();
                 var anchors = maps.known_beacons.keyIterator();
                 while (anchors.next()) |ank_raw| {
                     for (scanner.beacons) |ank_be| {
                         const scanner_pos = ank_raw.sub(ank_be.rotate(rotation));
-                        var match_count: usize = 0;
-                        for (scanner.beacons) |be| {
-                            const be_abs = be.rotate(rotation).add(scanner_pos);
-                            if (maps.known_beacons.contains(be_abs)) {
-                                match_count += 1;
-                                if (match_count >= 12) break;
+                        const entry = try count_table.getOrPut(scanner_pos);
+                        if (entry.found_existing) {
+                            entry.value_ptr.* += 1;
+                            if (entry.value_ptr.* >= 12) {
+                                //print("Scanner {} @{},{},{}\n", .{idx, scanner_pos.x, scanner_pos.y, scanner_pos.z});
+                                maps.add(scanner, rotation, scanner_pos, idx);
+                                continue :placed;
                             }
-                        }
-                        if (match_count >= 12) {
-                            print("Scanner {} @{},{},{}\n", .{idx, scanner_pos.x, scanner_pos.y, scanner_pos.z});
-                            maps.add(scanner, rotation, scanner_pos, idx);
-                            continue :placed;
+                        } else {
+                            entry.value_ptr.* = 1;
                         }
                     }
                 }
