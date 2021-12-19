@@ -13,7 +13,7 @@ const gpa = util.gpa;
 const data = @embedFile("../data/day19.txt");
 
 const P3 = struct {
-    x: int, y: int, z: int,
+    x: i32, y: i32, z: i32,
 
     pub fn add(self: @This(), b: @This()) @This() {
         const result = P3{
@@ -163,9 +163,9 @@ pub fn main() !void {
 
             var parts = split(u8, line, ",");
             try points.append(.{
-                .x = parseInt(int, parts.next().?, 10) catch unreachable,
-                .y = parseInt(int, parts.next().?, 10) catch unreachable,
-                .z = parseInt(int, parts.next().?, 10) catch unreachable,
+                .x = parseInt(i32, parts.next().?, 10) catch unreachable,
+                .y = parseInt(i32, parts.next().?, 10) catch unreachable,
+                .z = parseInt(i32, parts.next().?, 10) catch unreachable,
             });
             assert(parts.next() == null);
         }
@@ -193,8 +193,8 @@ pub fn main() !void {
             var rotation: u32 = 0;
             while (rotation < 24) : (rotation += 1) {
                 count_table.clearRetainingCapacity();
-                for (maps.known_beacons.keys()) |ank_raw| {
-                    for (scanner.beacons) |ank_be| {
+                for (scanner.beacons) |ank_be| {
+                    for (maps.known_beacons.keys()) |ank_raw| {
                         const scanner_pos = ank_raw.sub(ank_be.rotate(rotation));
                         const entry = try count_table.getOrPut(scanner_pos);
                         if (entry.found_existing) {
