@@ -141,7 +141,7 @@ fn addNumbers(a: []const Item, b: []const Item) ![]const Item {
 
     var output = std.ArrayList(Item).init(gpa);
     errdefer output.deinit();
-    try output.ensureTotalCapacity(a.len + b.len + 23);
+    try output.ensureTotalCapacity(a.len + b.len);
 
     try output.appendSlice(a);
     try output.appendSlice(b);
@@ -149,49 +149,52 @@ fn addNumbers(a: []const Item, b: []const Item) ![]const Item {
         it.depth += 1;
     }
 
-    while (true) {
-        {
-            var i: usize = 0;
-            while (i < output.items.len) : (i += 1) {
-                const it = output.items[i];
-                if (it.depth >= 5) {
-                    assert(it.depth == 5);
-                    assert(output.items[i+1].depth == 5);
-                    if (i > 0) {
-                        output.items[i-1].number += it.number;
-                    }
-                    if (i + 2 < output.items.len) {
-                        output.items[i+2].number += output.items[i+1].number;
-                    }
-                    _ = output.orderedRemove(i+1);
-                    output.items[i] = .{ .number = 0, .depth = 4 };
+    {
+        var i: usize = 0;
+        while (i < output.items.len) : (i += 1) {
+            const it = output.items[i];
+            if (it.depth >= 5) {
+                assert(it.depth == 5);
+                assert(output.items[i+1].depth == 5);
+                if (i > 0) {
+                    output.items[i-1].number += it.number;
                 }
+                if (i + 2 < output.items.len) {
+                    output.items[i+2].number += output.items[i+1].number;
+                }
+                _ = output.orderedRemove(i+1);
+                output.items[i] = .{ .number = 0, .depth = 4 };
             }
         }
-
-        var needs_another = false;
-        {
-            var i: usize = 0;
-            while (i < output.items.len) {
-                const it = output.items[i];
-                if (it.number >= 10) {
-                    output.items[i] = .{ .depth = it.depth + 1, .number = it.number / 2 };
-                    try output.insert(i+1, .{ .depth = it.depth + 1, .number = (it.number + 1) / 2 });
-                    if (it.depth == 4) {
-                        needs_another = true;
-                        break;
-                    }
-                } else {
-                    i += 1;
-                }
-            }
-        }
-
-        if (logging) printItems(output.items);
-
-        if (!needs_another) break;
     }
 
+    {
+        var i: usize = 0;
+        while (i < output.items.len) {
+            const it = output.items[i];
+            if (it.number >= 10) {
+                const left = it.number / 2;
+                const right = (it.number + 1) / 2;
+                if (it.depth == 4) {
+                    if (i+1 < output.items.len) {
+                        output.items[i+1].number += right;
+                    }
+                    output.items[i].number = 0;
+                    if (i > 0) {
+                        output.items[i-1].number += left;
+                        i -= 1;
+                    }
+                } else {
+                    output.items[i] = .{ .depth = it.depth + 1, .number = left };
+                    try output.insert(i+1, .{ .depth = it.depth + 1, .number = right });
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    if (logging) printItems(output.items);
     if (logging) print("\n", .{});
 
     return output.toOwnedSlice();
