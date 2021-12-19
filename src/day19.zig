@@ -113,15 +113,23 @@ const ScanMap = struct {
     placed: std.DynamicBitSet,
     rotations: []u32,
     positions: []P3,
-    known_beacons: Map(P3, void),
+    known_beacons: std.AutoArrayHashMap(P3, void),
 
     pub fn init(count: usize) !ScanMap {
         return ScanMap{
             .placed = try std.DynamicBitSet.initFull(gpa, count),
             .rotations = try gpa.alloc(u32, count),
             .positions = try gpa.alloc(P3, count),
-            .known_beacons = Map(P3, void).init(gpa),
+            .known_beacons = std.AutoArrayHashMap(P3, void).init(gpa),
         };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.known_beacons.deinit();
+        gpa.free(self.positions);
+        gpa.free(self.rotations);
+        self.placed.deinit();
+        self.* = undefined;
     }
 
     pub fn add(self: *@This(), scanner: Scanner, rotation: u32, position: P3, index: usize) void {
@@ -139,7 +147,9 @@ pub fn main() !void {
     var recs = blk: {
         var lines = tokenize(u8, data, "\r\n");
         var beacons = std.ArrayList(Scanner).init(gpa);
+        errdefer beacons.deinit();
         var points = std.ArrayList(P3).init(gpa);
+        defer points.deinit();
         while (lines.next()) |line| {
             if (line.len == 0) { continue; }
 
@@ -165,6 +175,7 @@ pub fn main() !void {
         }
         break :blk beacons.toOwnedSlice();
     };
+    defer gpa.free(recs);
 
     const parse_time = timer.lap();
 
@@ -172,6 +183,8 @@ pub fn main() !void {
     defer count_table.deinit();
 
     var maps = try ScanMap.init(recs.len);
+    defer maps.deinit();
+
     maps.add(recs[0], 0, .{.x = 0, .y = 0, .z = 0}, 0);
     placed: while (maps.placed.count() != 0) {
         var it = maps.placed.iterator(.{});
@@ -180,8 +193,7 @@ pub fn main() !void {
             var rotation: u32 = 0;
             while (rotation < 24) : (rotation += 1) {
                 count_table.clearRetainingCapacity();
-                var anchors = maps.known_beacons.keyIterator();
-                while (anchors.next()) |ank_raw| {
+                for (maps.known_beacons.keys()) |ank_raw| {
                     for (scanner.beacons) |ank_be| {
                         const scanner_pos = ank_raw.sub(ank_be.rotate(rotation));
                         const entry = try count_table.getOrPut(scanner_pos);
