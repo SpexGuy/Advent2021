@@ -48,6 +48,56 @@ const Table = struct {
         self.wins[0] = 0;
         self.countRecursive(1, 1, start_pos - 1, 0);
     }
+
+    const Buffer = [21][10]u64;
+
+    pub fn buildIterative(self: *@This(), start_pos: u32) void {
+        var pos = start_pos - 1;
+
+        // [score][position-1]
+        var buf_a: Buffer = undefined;
+        var buf_b: Buffer = undefined;
+
+        @memset(@ptrCast([*]u8, &buf_a), 0, @sizeOf(Buffer));
+        buf_a[0][pos] = 1;
+        self.alive[0] = 1;
+        self.wins[0] = 0;
+
+        var turn: usize = 1;
+        while (turn < max_turns-1) : (turn += 2) {
+            self.countTurn(turn, &buf_a, &buf_b);
+            self.countTurn(turn + 1, &buf_b, &buf_a);
+        }
+        if (turn < max_turns) {
+            self.countTurn(turn, &buf_a, &buf_b);
+        }
+    }
+
+    fn countTurn(noalias self: *@This(), turn: usize, noalias curr: *const Buffer, noalias next: *Buffer) void {
+        @memset(@ptrCast([*]u8, next), 0, @sizeOf(Buffer));
+        var alive_this_turn: u64 = 0;
+        var wins_this_turn: u64 = 0;
+        var score: usize = 0;
+        while (score < 21) : (score += 1) {
+            var pos: usize = 0;
+            while (pos < 10) : (pos += 1) {
+                const universes = curr[score][pos];
+                for (rolls) |r, i| {
+                    const new_pos = (pos + r) % 10;
+                    const new_score = score + new_pos + 1;
+                    const new_universes = universes * counts[i];
+                    if (new_score < 21) {
+                        next[new_score][new_pos] += new_universes;
+                        alive_this_turn += new_universes;
+                    } else {
+                        wins_this_turn += new_universes;
+                    }
+                }
+            }
+        }
+        self.alive[turn] = alive_this_turn;
+        self.wins[turn] = wins_this_turn;
+    }
 };
 
 pub fn main() !void {
@@ -87,9 +137,12 @@ pub fn main() !void {
     const p1_time = timer.lap();
 
     var p1_table = Table{};
-    p1_table.buildRecursive(p1_init);
+    //p1_table.buildRecursive(p1_init);
+    p1_table.buildIterative(p1_init);
+
     var p2_table = Table{};
-    p2_table.buildRecursive(p2_init);
+    //p2_table.buildRecursive(p2_init);
+    p2_table.buildIterative(p2_init);
 
     var p1_wins: u64 = 0;
     var p2_wins: u64 = 0;
