@@ -20,8 +20,7 @@ const rolls  = [_]u32{ 3, 4, 5, 6, 7, 8, 9 };
 const counts = [_]u64{ 1, 3, 6, 7, 6, 3, 1 };
 
 const Table = struct {
-    /// Playing to 21, the max number of turns is 11
-    /// (turn scores 2, 1, 3, 2, 1, 3, 2, 1, 3, 2, 1)
+    /// Playing to 21, the max number of turns is 10, plus 1 for turn 0
     const max_turns = 11;
 
     /// Number of universes where the player has not won after this many turns
