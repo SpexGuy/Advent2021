@@ -10,40 +10,114 @@ const int = i64;
 const util = @import("util.zig");
 const gpa = util.gpa;
 
-const data = @embedFile("../data/day00.txt");
+const data = @embedFile("../data/day25.txt");
 
 const Rec = struct {
     val: int,
 };
 
 pub fn main() !void {
-    var part1: int = 0;
-    var part2: int = 0;
-
-    var recs = blk: {
-        var recs = List(Rec).init(gpa);
+    var width: usize = 0;
+    var height: usize = 0;
+    // Load the map with a border of 9 values
+    var grid = blk: {
+        var height_map = List(u8).init(gpa);
+        errdefer height_map.deinit();
         var lines = tokenize(u8, data, "\r\n");
         while (lines.next()) |line| {
             if (line.len == 0) { continue; }
-            var parts = split(u8, line, " ");
-            const dist_str = parts.next().?;
-            assert(parts.next() == null);
+            if (width == 0) {
+                width = line.len;
+                try height_map.appendNTimes('-', width + 2);
+            } else {
+                assert(width == line.len);
+            }
 
-            const dist = parseInt(int, dist_str, 10) catch unreachable;
+            try height_map.append('-');
 
-            _ = dist;
-            try recs.append(.{
-                .val = dist,
-            });
+            for (line) |c| {
+                try height_map.append(c);
+            }
+            height += 1;
+
+            try height_map.append('-');
         }
-        break :blk recs.toOwnedSlice();
+        try height_map.appendNTimes('-', width + 2);
+        break :blk height_map.toOwnedSlice();
     };
-    _ = recs;
+    defer gpa.free(grid);
 
-    //const items = util.parseLinesDelim(Rec, data, " ,:(){}<>[]!\r\n\t");
-    //_ = items;
+    const pitch = width + 2;
+    const start = pitch + 1;
 
-    print("part1={}, part2={}\n", .{part1, part2});
+    var next_grid = try gpa.dupe(u8, grid);
+    defer gpa.free(next_grid);
+
+    var is_moving = true;
+    var part1: usize = 0;
+    while (is_moving) {
+        is_moving = false;
+        {
+            var i: usize = 0;
+            while (i < height) : (i += 1) {
+                @memset(next_grid.ptr + start + i*pitch, '.', width);
+            }
+        }
+
+        part1 += 1;
+        for (grid) |c, i| {
+            if (c == '>') {
+                if (grid[i+1] == '.') {
+                    next_grid[i+1] = '>';
+                    is_moving = true;
+                } else if (grid[i+1] == '-' and grid[i+1-width] == '.') {
+                    next_grid[i+1-width] = '>';
+                    is_moving = true;
+                } else {
+                    next_grid[i] = '>';
+                }
+            }
+            if (c == 'v') {
+                next_grid[i] = 'v';
+            }
+        }
+
+        {
+            const tmp = next_grid;
+            next_grid = grid;
+            grid = tmp;
+
+            var i: usize = 0;
+            while (i < height) : (i += 1) {
+                @memset(next_grid.ptr + start + i*pitch, '.', width);
+            }
+        }
+        
+        for (grid) |c, i| {
+            if (c == '>') {
+                next_grid[i] = '>';
+            }
+            if (c == 'v') {
+                if (grid[i+pitch] == '.') {
+                    next_grid[i+pitch] = 'v';
+                    is_moving = true;
+                } else if (grid[i+pitch] == '-' and grid[i+pitch-(pitch*height)] == '.') {
+                    next_grid[i+pitch-(pitch*height)] = 'v';
+                    is_moving = true;
+                } else {
+                    next_grid[i] = 'v';
+                }
+            }
+        }
+
+        {
+            const tmp = next_grid;
+            next_grid = grid;
+            grid = tmp;
+        }
+    }
+
+    print("part1={}\n", .{part1});
 }
 
 // Useful stdlib functions
