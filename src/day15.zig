@@ -18,12 +18,12 @@ const PriorityEntry = struct {
     pos: Coord,
     cost: u64,
 
-    pub fn compare(a: @This(), b: @This()) std.math.Order {
+    pub fn compare(_: void, a: @This(), b: @This()) std.math.Order {
         return std.math.order(a.cost, b.cost);
     }
 };
 
-const Queue = std.PriorityDequeue(PriorityEntry, PriorityEntry.compare);
+const Queue = std.PriorityDequeue(PriorityEntry, void, PriorityEntry.compare);
 
 fn wrap(val: u8) u8 {
     if (val <= 9) return val;
@@ -69,7 +69,7 @@ pub fn main() !void {
         std.mem.set(u64, costs, std.math.maxInt(u64));
         costs[0] = 0;
 
-        var queue = Queue.init(gpa);
+        var queue = Queue.init(gpa, {});
         defer queue.deinit();
         try queue.add(.{ .pos = .{0, 0}, .cost = costs[0] });
         while (true) {
@@ -115,7 +115,7 @@ pub fn main() !void {
         std.mem.set(u64, costs, std.math.maxInt(u64));
         costs[0] = 0;
 
-        var queue = Queue.init(gpa);
+        var queue = Queue.init(gpa, {});
         defer queue.deinit();
         try queue.add(.{ .pos = .{0, 0}, .cost = costs[0] });
 
